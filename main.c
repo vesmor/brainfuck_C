@@ -7,6 +7,8 @@
         makes sure the program array actually has the chars
 
         implement the brainfuck logic
+
+        error check the fgetc and other commands
 */
 
 #include <stdio.h>
@@ -26,32 +28,23 @@
 #define TRUE    1
 #define FALSE   0
 
-/*
-    > = increases memory pointer, or moves the pointer to the right 1 block.
-    < = decreases memory pointer, or moves the pointer to the left 1 block.
-    + = increases value stored at the block pointed to by the memory pointer
-    - = decreases value stored at the block pointed to by the memory pointer
-    [ = like c while(cur_block_value != 0) loop.
-    ] = if block currently pointed to's value is not zero, jump back to [
-    , = like c getchar(). input 1 character.
-    . = like c putchar(). print 1 character to the console
-*/
+
 
 const char valid_tokens[] = {'>', '<', '+', '-', '[', ']', ',', '.'};
 size_t tokenlist_size = sizeof(valid_tokens)/sizeof(char);
 
 
 //Function Declarations
-size_t readProgram(char *program, size_t *program_size);
-short isValidToken(char token);
-void printTape(__uint8_t *tape, size_t tape_size);
-void printProgram(char *program, size_t program_size);
+size_t readProgram(FILE *fp, char *program, size_t *program_size); //returns the predicted size of tape needed for program
+short isValidToken(char token); //returns TRUE if token is valid, FALSE otherwise
+void printTape(__uint8_t tape[], size_t tape_size);
+void printProgram(char program[], size_t program_size);
 //--------------------
 
-FILE *inputfile;
 int main(int argc, char const *argv[])
 {
     
+    FILE *inputfile;
 
     //read in file or command line
     if ( argc > 1){
@@ -59,7 +52,7 @@ int main(int argc, char const *argv[])
         inputfile = fopen(argv[1], "r");
         if(inputfile == NULL){
 
-            perror(RED "Problem opening the input file that was given" RESET);
+            fprintf(stderr, RED "Problem opening the input file %s" RESET, argv[1]);
 
             return EXIT_SUCCESS;
 
@@ -68,15 +61,17 @@ int main(int argc, char const *argv[])
     }
     else{
         
+        printf("Input EOF when done writing program in command prompt.\n");
+        printf(CYAN "\tCtrl + D for Linux at the moment.\n\n" RESET);
         inputfile = stdin;
 
     }
     
-    //figure out how much space we need on the tape
+    //figure out how much space we need on the tape (we add more as needed, for example in a loop)
     size_t program_size;
 
-    char *program = malloc(sizeof(char));
-    size_t tape_size = readProgram(program, &program_size);
+    char *program = malloc(sizeof(int)); 
+    size_t tape_size = readProgram(inputfile, program, &program_size);
 
     __uint8_t *tape = calloc(sizeof(__uint8_t), tape_size);
 
@@ -89,13 +84,64 @@ int main(int argc, char const *argv[])
         printProgram(program, program_size);
     }
 
-    // if(program == NULL){
-    //     printf("NULL\n");
-    // }
-
+    
    
 
     //brainfuck logic
+    /*
+    > = increases memory pointer, or moves the pointer to the right 1 block.
+    < = decreases memory pointer, or moves the pointer to the left 1 block.
+    + = increases value stored at the block pointed to by the memory pointer
+    - = decreases value stored at the block pointed to by the memory pointer
+    [ = like c while(cur_block_value != 0) loop.
+    ] = if block currently pointed to's value is not zero, jump back to [
+    , = like c getchar(). input 1 character.
+    . = like c putchar(). print 1 character to the console
+*/
+    
+    size_t ip = 0; //instruction pointer
+    size_t pp = 0; //program pointer
+    for (pp = 0; (pp < program_size); pp++)
+    {   
+        
+        switch (program[pp])
+        {
+        case '>':
+            ip += 1;
+            break;
+        
+        case '<':
+            ip -= 1;
+            if (ip < tape_size)
+            {
+                fprintf(stderr, "");
+            }
+            
+            break;
+        case '+':
+            tape[ip] += 1;
+            if(tape[ip] > 255){
+                tape[ip] = 0;
+            }
+            break;
+        
+        case '-':
+            tape[ip] -= 1;
+            if (tape[ip] < 0)
+            {
+                tape[ip] = 255;
+            }
+            break;
+        
+        default:
+            continue;
+        }
+        
+
+    }
+    
+
+
    
    //clean up
    
@@ -110,24 +156,24 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
-//returns the predicted size of tape needed for program
-size_t readProgram(char *program, size_t *program_size){
 
-    program = NULL;
+size_t readProgram(FILE *fp, char *program, size_t *program_size){
+
+    // program = NULL;
 
     *program_size = 1;
     int tape_size = 0;
 
     char c;
-    while( !feof(inputfile) ){
+    while( !feof(fp) ){
   
         program = realloc(program, *program_size);
         
-        c = fgetc(inputfile);    
+        c = fgetc(fp);    
 
         //ignore everything that isn't a valid token
         if(isValidToken(c)){
-            printf("token: %c\n", c);
+            // printf("token: %c\n", c);
         
             if (c == '>'){
                 tape_size++;
@@ -144,7 +190,7 @@ size_t readProgram(char *program, size_t *program_size){
 }
 
 
-//returns if token is found
+
 short isValidToken(char token){
 
     for (size_t i = 0; i < tokenlist_size; i++)
@@ -160,7 +206,7 @@ short isValidToken(char token){
 }
 
 
-void printTape(__uint8_t *tape, size_t tape_size){
+void printTape(__uint8_t tape[], size_t tape_size){
 
     for (size_t i = 0; i < tape_size; i++)
     {
