@@ -42,7 +42,7 @@ size_t total_bracket_count = 0; // counted in "readProgram"
 typedef struct Token
 {
     char token;
-    int matching_bracket; //instruction pointer of matching bracket
+    int matching_bracket_index; //instruction pointer of matching bracket
 }Token;
 
 typedef struct Program
@@ -107,8 +107,8 @@ Program validateProgram(Program program){
             //pop the stack
             Bracket matchedBracket= stack[stack_pointer];
             
-            program.program[i].matching_bracket = matchedBracket.self_index; // tell ']' where its matched '[' index is
-            program.program[matchedBracket.self_index].matching_bracket = i; //tell matched '[' what current ']' index is
+            program.program[i].matching_bracket_index = matchedBracket.self_index; // tell ']' where its matched '[' index is
+            program.program[matchedBracket.self_index].matching_bracket_index = i; //tell matched '[' what current ']' index is
             
 
             stack_pointer--;
@@ -199,7 +199,7 @@ int main(int argc, char const *argv[])
             break;
         
         case '<':
-            printf("decrementing pointer\n");
+            // printf("decrementing pointer\n");
             
             if (tape_pointer <= 0)
             {
@@ -210,7 +210,7 @@ int main(int argc, char const *argv[])
             break;
         
         case '+':
-            printf("incrementing value at %ld\n", tape_pointer);
+            // printf("incrementing value at %ld\n", tape_pointer);
     
             if(tape.tape[tape_pointer] >= 255){
                 tape.tape[tape_pointer] = 0;
@@ -222,7 +222,7 @@ int main(int argc, char const *argv[])
             break;
         
         case '-':
-            printf("decrementing value at %ld\n", tape_pointer);
+            // printf("decrementing value at %ld\n", tape_pointer);
 
             if (tape.tape[tape_pointer] <= 0)
             {
@@ -236,20 +236,26 @@ int main(int argc, char const *argv[])
             break;
         
         case '.':
-            printf("outputting char\n");
+            // printf("outputting char\n");
             putchar( (char)tape.tape[tape_pointer] );
             break;
 
         case ',':
-            printf("inputting char\n");
+            // printf("inputting char\n");
             tape.tape[tape_pointer] = fgetc(stdin);
             break;
         
         case '[':
-            printf("beginning loop\n");
+            // printf("beginning loop\n");
             //check if current pointer is 0
             if(tape.tape[tape_pointer] == 0){
-                //IMPLEMENT find matching bracket's index to skip past
+                //Skip forward to matched bracket
+                if(program.program[program_pointer].matching_bracket_index == -1){
+                    printf(RED "[FATAL ERROR]: " RESET "A matching bracket for '[' is not referenced");
+                    return EXIT_FAILURE;
+                }
+
+                program_pointer = program.program[program_pointer].matching_bracket_index;
 
                 break;
             }
@@ -257,13 +263,22 @@ int main(int argc, char const *argv[])
             break;
 
         case ']':
+            // printf("breaking loop\n");
             if(tape.tape[tape_pointer] == 0){
-                
-                
+                //continue forward in program      
                 break;
             }
             
-            //IMPLEMENT find matching bracket's index to go back
+            //Go back to matched bracket
+            if(program.program[program_pointer].matching_bracket_index == -1){
+                printf(RED "[FATAL ERROR]: " RESET "A matching bracket for ']' is not referenced");
+                return EXIT_FAILURE;
+            }
+
+            program_pointer = program.program[program_pointer].matching_bracket_index; //goes back to matched bracket
+
+            break;
+            
 
         default:
             continue;
@@ -332,7 +347,7 @@ Program readProgram(FILE *fp){
             }
 
             program.program[program.program_size].token = c;
-            program.program[program.program_size].matching_bracket = -1; //we wont know it until we validate program
+            program.program[program.program_size].matching_bracket_index = -1; //we wont know it until we validate program
             program.program_size++;
 
         }
@@ -402,8 +417,8 @@ void printProgram(Program program){
     for (size_t i = 0; i < program.program_size; i++)
     {
         
-        program.program[i].matching_bracket != -1 ? \
-            printf(" {'%c': %d} ", program.program[i].token, program.program[i].matching_bracket)
+        program.program[i].matching_bracket_index != -1 ? \
+            printf(" {'%c': %d} ", program.program[i].token, program.program[i].matching_bracket_index)
             :
             printf(" {'%c'} ", program.program[i].token)
             ;
