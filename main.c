@@ -6,9 +6,13 @@
 
         makes sure the program array actually has the chars
 
-        implement the brainfuck logic
-
         error check the fgetc and other commands
+
+        add brackets
+
+        check if program is valid
+
+
 */
 
 #include <stdio.h>
@@ -34,12 +38,20 @@ const char valid_tokens[] = {'>', '<', '+', '-', '[', ']', ',', '.'};
 size_t tokenlist_size = sizeof(valid_tokens)/sizeof(char);
 
 
+typedef struct Program
+{
+    unsigned char *program;
+    size_t program_size;
+}Program;
+
+
 //Function Declarations
-size_t readProgram(FILE *fp, char *program, size_t *program_size); //returns the predicted size of tape needed for program
+Program readProgram(FILE *fp); //reads valid tokens from file and return a program struct
 short isValidToken(char token); //returns TRUE if token is valid, FALSE otherwise
-void printTape(__uint8_t tape[], size_t tape_size);
-void printProgram(char program[], size_t program_size);
+void printTape(Program tape);
+void printProgram(char Program[], size_t program_size);
 //--------------------
+
 
 int main(int argc, char const *argv[])
 {
@@ -62,30 +74,27 @@ int main(int argc, char const *argv[])
     else{
         
         printf("Input EOF when done writing program in command prompt.\n");
-        printf(CYAN "\tCtrl + D for Linux at the moment.\n\n" RESET);
+        printf(CYAN "\tPress Ctrl + D on Linux to exit program.\n\n" RESET);
         inputfile = stdin;
 
     }
     
-    //figure out how much space we need on the tape (we add more as needed, for example in a loop)
-    size_t program_size;
+    //read in program and initialize tape
 
-    char *program = malloc(sizeof(int)); 
-    size_t tape_size = readProgram(inputfile, program, &program_size);
-
-    __uint8_t *tape = calloc(sizeof(__uint8_t), tape_size);
-
-    printf("Tape:\n");
-    printTape(tape, tape_size);
+    Program program;
+    program = readProgram(inputfile);
 
 
-    if(program != NULL){
-        printf("Program:\n");
-        printProgram(program, program_size);
-    }
+    Program tape;
+    tape.program_size = 30000; //default tape size, based on brainfuck "standard"
+    tape.program = calloc(sizeof(char), tape.program_size);
 
-    
-   
+
+    printf("Validated Program:\n");
+    printTape(program);
+
+
+    printf("\n\n" MAGENTA "Start of program output:" RESET "\n\n");
 
     //brainfuck logic
     /*
@@ -99,40 +108,70 @@ int main(int argc, char const *argv[])
     . = like c putchar(). print 1 character to the console
 */
     
-    size_t ip = 0; //instruction pointer
-    size_t pp = 0; //program pointer
-    for (pp = 0; (pp < program_size); pp++)
+    size_t instruction_pointer = 0; //where we are in the tape
+    size_t program_pointer = 0; //where we are while reading the program
+    for (program_pointer = 0; (program_pointer < program.program_size); program_pointer++)
     {   
         
-        switch (program[pp])
+        switch (program.program[program_pointer])
         {
         case '>':
-            ip += 1;
+            // printf("incrementing pointer\n");
+            
+            if (instruction_pointer >= tape.program_size){
+                fprintf(stderr, RED "Instruction pointer has gone above and out of tape bounds it is currently at " RESET "%ld\n", instruction_pointer);
+                return EXIT_FAILURE;
+            }
+            instruction_pointer += 1;
             break;
         
         case '<':
-            ip -= 1;
-            if (ip < tape_size)
+            printf("decrementing pointer\n");
+            
+            if (instruction_pointer <= 0)
             {
-                fprintf(stderr, "");
+                fprintf(stderr, RED "Instruction pointer has gone below and out of tape bounds it is currently at " RESET "%ld\n" , instruction_pointer);
+                return EXIT_FAILURE;
+            }    
+            instruction_pointer -= 1;
+            break;
+        
+        case '+':
+            printf("incrementing value at %ld\n", instruction_pointer);
+    
+            if(tape.program[instruction_pointer] >= 255){
+                tape.program[instruction_pointer] = 0;
+            }
+            else{
+                tape.program[instruction_pointer]++;
             }
             
             break;
-        case '+':
-            tape[ip] += 1;
-            if(tape[ip] > 255){
-                tape[ip] = 0;
-            }
-            break;
         
         case '-':
-            tape[ip] -= 1;
-            if (tape[ip] < 0)
+            printf("decrementing value at %ld\n", instruction_pointer);
+
+            if (tape.program[instruction_pointer] <= 0)
             {
-                tape[ip] = 255;
+                tape.program[instruction_pointer] = 255;
             }
+            else
+            {
+                tape.program[instruction_pointer]--;
+            }
+
             break;
         
+        case '.':
+            printf("outputting char\n");
+            putchar( (char)tape.program[instruction_pointer] );
+            break;
+
+        case ',':
+            printf("inputting char\n");
+            tape.program[instruction_pointer] = fgetc(stdin);
+            break;
+
         default:
             continue;
         }
@@ -140,16 +179,16 @@ int main(int argc, char const *argv[])
 
     }
     
-
-
+    printf("\nTape:\n");
+    printTape(tape);
    
    //clean up
    
-    tape = NULL;
-    free(tape);
+   free(tape.program);
+   tape.program = NULL;
 
-    program = NULL;
-    free(program);
+   free(program.program);
+    program.program = NULL;
     
     fclose(inputfile);
     
@@ -157,36 +196,54 @@ int main(int argc, char const *argv[])
 }
 
 
-size_t readProgram(FILE *fp, char *program, size_t *program_size){
+Program readProgram(FILE *fp){
 
-    // program = NULL;
+    
+    size_t current_allocated_size = 10000;
 
-    *program_size = 1;
-    int tape_size = 0;
 
-    char c;
-    while( !feof(fp) ){
-  
-        program = realloc(program, *program_size);
-        
-        c = fgetc(fp);    
+    Program program;
+    program.program_size = 0;
+    program.program = NULL;
 
-        //ignore everything that isn't a valid token
-        if(isValidToken(c)){
-            // printf("token: %c\n", c);
-        
-            if (c == '>'){
-                tape_size++;
-            }
-        
-            program[(*program_size) - 1] = c;
-            (*program_size) += 1;
-        }
-        
+    program.program = malloc(sizeof(char) * current_allocated_size);
+    if (program.program == NULL)
+    {
+        fprintf(stderr, RED "Error allocating enough memory for program" RESET);
+        exit(EXIT_FAILURE);
     }
 
-    *program_size -= 1; //overcounted program size
-    return tape_size;
+    while (!feof(fp)){
+
+        char c = fgetc(fp);
+
+        if(isValidToken(c)){
+
+            //check if program still has enough allocated space
+            
+            if (program.program_size >= current_allocated_size){
+
+                current_allocated_size *= 2;
+                program.program = realloc(program.program, sizeof(char) * current_allocated_size);
+                if (program.program == NULL)
+                {
+                    free(program.program);
+                    fprintf(stderr, RED "Error reallocating enough memory for program" RESET);
+                    exit(EXIT_FAILURE);
+                }
+                
+            }
+            
+            program.program[program.program_size] = c;
+            program.program_size++;
+
+        }
+
+    }
+
+    
+
+    return program;
 }
 
 
@@ -196,6 +253,7 @@ short isValidToken(char token){
     for (size_t i = 0; i < tokenlist_size; i++)
     {
         if(token == valid_tokens[i]){
+            printf("%c is valid token\n", token);
             return TRUE;
         }
     }
@@ -205,13 +263,32 @@ short isValidToken(char token){
 
 }
 
+//prints until there are 5 empty blocks found in a row
+void printTape(Program tape){
 
-void printTape(__uint8_t tape[], size_t tape_size){
+    printf("tape size: %ld\n", tape.program_size);
 
-    for (size_t i = 0; i < tape_size; i++)
+    int num_empty = 0;
+    const int max_empty = 5;
+
+    for (size_t i = 0; i < tape.program_size; i++)
     {
         
-        printf("[%d]", tape[i]);
+        if(num_empty >= max_empty){
+            break;
+        }
+        
+        
+        printf("[%d]", tape.program[i]);
+        
+ 
+        if(tape.program[i] == 0){
+            num_empty++;
+        }
+        else{
+            num_empty = 0;
+        }
+        
 
     }
 
