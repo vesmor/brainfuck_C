@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 
 //--------Fun Terminal Coloring---------------
@@ -38,6 +39,14 @@
 const char valid_tokens[] = {'>', '<', '+', '-', '[', ']', ',', '.'};
 size_t tokenlist_size = sizeof(valid_tokens)/sizeof(char);
 size_t total_bracket_count = 0; // counted in "readProgram"
+
+
+int8_t trace_flag = FALSE; // should we print trace messages for user
+int8_t memory_dump_flag = FALSE; // dumps memory (tape) after execution
+int8_t memory_trace_flag = FALSE; // dumps memory after each instruction
+int8_t show_program_flag = FALSE; // shows program with only validated tokens
+int8_t useFile_flag = FALSE; // internal, keeps track if theres's a file being read
+
 
 typedef struct Token
 {
@@ -81,7 +90,7 @@ Program validateProgram(Program program){
 
 
     if(program.program_size == 0){
-        printf(YELLOW "[WARNING]: " RESET "No tokens were recognized in source code \n");
+        printf(YELLOW "[WARNING]: " RESET "No tokens were recognized in source code, nothing will run.\n");
         exit(EXIT_FAILURE);
     }
        
@@ -100,7 +109,7 @@ Program validateProgram(Program program){
 
         else if(curr_token == ']'){
             if(stack_pointer < 0){
-                fprintf(stderr, RED "[FATAL ERROR]: " RESET "Can't run program, there is an unmatched ']' \n");
+                fprintf(stderr, RED "[ERROR]: " RESET "Can't run program, there is an unmatched ']' \n");
                 exit(EXIT_FAILURE);
             }
             
@@ -118,7 +127,7 @@ Program validateProgram(Program program){
 
     //should be empty if we matched everything
     if(stack_pointer >= 0){
-        fprintf(stderr, RED "[FATAL ERROR]: " RESET "Can't run program, there is an unmatched '[' \n");
+        fprintf(stderr, RED "[ERROR]: " RESET "Can't run program, there is an unmatched '[' \n");
         exit(EXIT_FAILURE);
     }
 
@@ -131,14 +140,59 @@ int main(int argc, char const *argv[])
 {
     
     FILE *inputfile;
+    char inputfile_name[100];
+    inputfile_name[0] = 0;
 
-    //read in file or command line
-    if ( argc > 1){
+    for (short i = 1; i < argc; i++)
+    {
+        if(strcmp(argv[i] , "-h") == 0 || strcmp(argv[i] , "--help") == 0){
 
-        inputfile = fopen(argv[1], "r");
+            printf(CYAN "=============BRAINFUCK COMPILER=============\n" RESET);
+            printf("USAGE: bf [OPTIONS] ... [FILE]\n");
+            printf("Uses a 30,000 long virtual memory tape to run your brainfuck program.");
+            printf("\n");
+            printf(" -t,\t--trace \t\t\t Log out what your program is doing with each instruction\n");
+            printf(" -md,\t--memory-dump \t\t\t Show the memory (aka tape) after program execution\n");
+            printf(" -mt,\t--memory-trace \t\t\t Show the memory (aka tape) after each instruction is executed\n");
+            printf(" -p,\t--show-program \t\t\t Print out the program after it got parsed\n");
+
+            printf("\n\n");
+            printf("Thanks for using my implementation of the brainfuck compiler.\n");
+            printf(" -Sev <www.romsev.dev>\n");
+
+            return EXIT_SUCCESS;
+        }
+
+        if(strcmp(argv[i] , "-t") == 0 || strcmp(argv[i] , "--trace") == 0){
+            trace_flag = TRUE;
+        }
+
+        if(strcmp(argv[i] , "-md") == 0 || strcmp(argv[i] , "--memory-dump") == 0){
+            memory_dump_flag = TRUE;
+        }
+
+        if(strcmp(argv[i] , "-mt") == 0 || strcmp(argv[i] , "--memory-trace") == 0){
+            memory_trace_flag = TRUE;
+        }
+
+        if(strcmp(argv[i] , "-p") == 0 || strcmp(argv[i] , "--show-program") == 0){
+            show_program_flag = TRUE;
+        }
+
+        if(strstr(argv[i], ".bf") != NULL){ //regex would be better here but in spirit of keeping brainfuck compilers light, ill just do a simple check
+            strcpy(inputfile_name, argv[i]);
+            printf("File Name: %s", inputfile_name);
+        }
+    }
+    
+
+    //read in file for processing or look at the command line
+    if (inputfile_name[0] != 0){ //if char array not empty
+
+        inputfile = fopen(inputfile_name, "r");
         if(inputfile == NULL){
 
-            fprintf(stderr, RED "Problem opening the input file %s" RESET, argv[1]);
+            fprintf(stderr, RED "[ERROR]: " RESET "Problem opening or finding the input file %s\n", inputfile_name);
 
             return EXIT_SUCCESS;
 
@@ -163,11 +217,15 @@ int main(int argc, char const *argv[])
     tape.tape_size = 30000; //default tape size, based on brainfuck "standard"
     tape.tape = calloc(sizeof(char), tape.tape_size);
 
-
-    printf("Validated Program:\n");
-    printProgram(program);
-
-    printf("\n\n" MAGENTA "Start of program output:" RESET "\n\n");
+    if(show_program_flag){
+        printf("Validated Program:\n");
+        printProgram(program);
+    }
+    
+    //good seperator
+    if(trace_flag || memory_dump_flag || memory_trace_flag || show_program_flag){
+        printf("\n\n" MAGENTA "Start of program output:" RESET "\n\n");
+    }
 
     //brainfuck logic
     /*
@@ -189,28 +247,34 @@ int main(int argc, char const *argv[])
         switch (program.program[program_pointer].token)
         {
         case '>':
-            // printf("incrementing pointer\n");
+            if(trace_flag){
+                printf("Incrementing pointer to %ld\n", tape_pointer + 1);
+            }
             
             if (tape_pointer >= tape.tape_size){
-                fprintf(stderr, RED "Instruction pointer has gone above and out of tape bounds it is currently at " RESET "%ld\n", tape_pointer);
+                fprintf(stderr, RED "Tape pointer has gone above and out of bounds it is currently at " RESET "%ld\n", tape_pointer);
                 return EXIT_FAILURE;
             }
             tape_pointer += 1;
             break;
         
         case '<':
-            // printf("decrementing pointer\n");
+            if(trace_flag){    
+                printf("Decrementing pointer to %ld \n", tape_pointer - 1);
+            }
             
             if (tape_pointer <= 0)
             {
-                fprintf(stderr, RED "Instruction pointer has gone below and out of tape bounds it is currently at " RESET "%ld\n" , tape_pointer);
+                fprintf(stderr, RED "Tape pointer has gone below and out of bounds it is currently at " RESET "%ld\n" , tape_pointer);
                 return EXIT_FAILURE;
             }    
             tape_pointer -= 1;
             break;
         
         case '+':
-            // printf("incrementing value at %ld\n", tape_pointer);
+            if(trace_flag){
+                printf("Incrementing value at %ld\n", tape_pointer);
+            }
     
             if(tape.tape[tape_pointer] >= 255){
                 tape.tape[tape_pointer] = 0;
@@ -222,7 +286,9 @@ int main(int argc, char const *argv[])
             break;
         
         case '-':
-            // printf("decrementing value at %ld\n", tape_pointer);
+            if(trace_flag){
+                printf("Decrementing value at %ld\n", tape_pointer);
+            }
 
             if (tape.tape[tape_pointer] <= 0)
             {
@@ -236,17 +302,23 @@ int main(int argc, char const *argv[])
             break;
         
         case '.':
-            // printf("outputting char\n");
+            if(trace_flag){
+                printf("Outputting at cell %ld\n", tape_pointer);
+            }
             putchar( (char)tape.tape[tape_pointer] );
             break;
 
         case ',':
-            // printf("inputting char\n");
+            if(trace_flag){
+                printf("Waiting for input into cell %ld\n", tape_pointer);
+            }
             tape.tape[tape_pointer] = fgetc(stdin);
             break;
         
         case '[':
-            // printf("beginning loop\n");
+            if(trace_flag){
+                printf("Beginning loop\n");
+            }
             //check if current pointer is 0
             if(tape.tape[tape_pointer] == 0){
                 //Skip forward to matched bracket
@@ -263,8 +335,11 @@ int main(int argc, char const *argv[])
             break;
 
         case ']':
-            // printf("breaking loop\n");
+            
             if(tape.tape[tape_pointer] == 0){
+                if(trace_flag){
+                    printf("Continuing loop\n");
+                }
                 //continue forward in program      
                 break;
             }
@@ -276,7 +351,9 @@ int main(int argc, char const *argv[])
             }
 
             program_pointer = program.program[program_pointer].matching_bracket_index; //goes back to matched bracket
-
+            if(trace_flag){
+                printf("Looping pack to %ld", program_pointer);
+            }
             break;
             
 
@@ -284,18 +361,21 @@ int main(int argc, char const *argv[])
             continue;
         }
         
-
+        if(memory_trace_flag){
+            printTape(tape);
+        }
     }
     
-    printf("\nTape:\n");
-    printTape(tape);
-   
-   //clean up
-   
-   free(tape.tape);
-   tape.tape = NULL;
+    if(memory_dump_flag || memory_trace_flag){
+        printf("\nTape after execution:\n");
+        printTape(tape);
+    }
+    
+    //clean up
+    free(tape.tape);
+    tape.tape = NULL;
 
-   free(program.program);
+    free(program.program);
     program.program = NULL;
     
     fclose(inputfile);
@@ -366,7 +446,7 @@ short isValidToken(char token){
     for (size_t i = 0; i < tokenlist_size; i++)
     {
         if(token == valid_tokens[i]){
-            printf("%c is valid token\n", token);
+            // printf("%c is valid token\n", token);
             return TRUE;
         }
     }
@@ -413,16 +493,11 @@ void printTape(Tape tape){
 void printProgram(Program program){
 
 
-    printf("program size: %ld\n", program.program_size);
+    printf("Number of validated characters: %ld\n", program.program_size);
     for (size_t i = 0; i < program.program_size; i++)
     {
         
-        program.program[i].matching_bracket_index != -1 ? \
-            printf(" {'%c': %d} ", program.program[i].token, program.program[i].matching_bracket_index)
-            :
-            printf(" {'%c'} ", program.program[i].token)
-            ;
-
+        printf("%c", program.program[i].token);
     }
 
     printf("\n");
