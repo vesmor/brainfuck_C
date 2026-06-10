@@ -181,7 +181,7 @@ int main(int argc, char const *argv[])
 
         if(strstr(argv[i], ".bf") != NULL){ //regex would be better here but in spirit of keeping brainfuck compilers light, ill just do a simple check
             strcpy(inputfile_name, argv[i]);
-            printf("File Name: %s", inputfile_name);
+            printf("File Name: %s \n", inputfile_name);
         }
     }
     
@@ -380,6 +380,8 @@ int main(int argc, char const *argv[])
     
     fclose(inputfile);
     
+    printf("\n");
+
     return 0;
 }
 
